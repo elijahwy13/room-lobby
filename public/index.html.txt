@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Room Lobby</title>
+<style>
+:root { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; }
+body { margin: 0; display: grid; place-items: center; min-height: 100svh; background: #0f172a; color: #e2e8f0; }
+.card { width: min(680px, 92vw); background: #111827; border: 1px solid #1f2937; border-radius: 16px; padding: 24px; box-shadow: 0 10px 30px rgba(0,0,0,.2); }
+h1 { margin: 0 0 8px; font-size: 24px; }
+.muted { color: #94a3b8; margin-bottom: 16px; }
+.row { display: flex; gap: 12px; flex-wrap: wrap; }
+input { flex: 1; min-width: 140px; padding: 10px 12px; border-radius: 10px; border: 1px solid #334155; background: #0b1220; color: #e2e8f0; }
+button { padding: 10px 14px; border-radius: 10px; border: 1px solid #334155; background: #1e293b; color: #e2e8f0; cursor: pointer; }
+button:hover { filter: brightness(1.1); }
+.pill { display: inline-block; padding: 6px 10px; border-radius: 999px; background: #0b1220; border: 1px solid #334155; font-weight: 600; letter-spacing: .08em; }
+.list { margin-top: 12px; border-top: 1px dashed #334155; padding-top: 12px; }
+.player { display: flex; align-items: center; gap: 8px; padding: 6px 0; }
+.host { font-size: 12px; color: #93c5fd; border: 1px solid #93c5fd55; padding: 2px 6px; border-radius: 999px; }
+.error { color: #fca5a5; margin-top: 8px; }
+.start { margin-top: 12px; }
+</style>
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js" integrity="sha384-GnV0mQW6Tto1jQheUVSfV7Fj0qSg0w1rE6Yk2r3wVjQ2A2mPj0i7m0V0I5r2y6v7" crossorigin="anonymous"></script>
+</head>
+<body>
+<div class="card">
+<h1>Party Lobby</h1>
+<div class="muted">Create a room and share the code, or join one. Works in Safari.</div>
+
+
+<div id="prejoin">
+<div class="row" style="margin-bottom:8px;">
+<input id="name" placeholder="Display name" autocomplete="name" />
+</div>
+<div class="row" style="margin-bottom:8px;">
+<input id="code" placeholder="Room code (e.g., ABCD)" maxlength="4" style="text-transform:uppercase;" />
+<button id="joinBtn">Join</button>
+</div>
+<div class="row">
+<button id="createBtn">Create New Room</button>
+</div>
+<div class="error" id="err"></div>
+</div>
+
+
+<div id="lobby" style="display:none;">
+<div>Room Code: <span class="pill" id="roomCode">----</span></div>
+<div class="list" id="playerList"></div>
+<div class="start">
+<button id="startBtn" title="Host only">Start Game</button>
+</div>
+<div class="muted" style="margin-top:10px;">Share the code with friends. When everyone joins, the host can start.</div>
+</div>
+</div>
+
+
+<script>
+const $ = (id) => document.getElementById(id);
+const socket = io();
+
+
+let you = null; // { id, name, isHost }
+let currentCode = null;
+</html>

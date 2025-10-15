@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Prompt Guessing</title>
+  <style>
+    :root { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; }
+    body { margin: 0; display: grid; place-items: center; min-height: 100svh; background: #f97316; color: #111827; } /* ORANGE */
+    .card { width: min(900px, 95vw); background: #ffffff; border: 1px solid #e5e7eb; border-radius: 16px; padding: 24px; box-shadow: 0 10px 30px rgba(0,0,0,.15); }
+    h1 { margin: 0 0 12px; font-size: 22px; }
+    .row { display: flex; gap: 12px; flex-wrap: wrap; }
+    input { flex: 1; min-width: 180px; padding: 10px 12px; border-radius: 10px; border: 1px solid #d1d5db; background: #ffffff; color: #111827; }
+    button { padding: 10px 14px; border-radius: 10px; border: 1px solid #d1d5db; background: #111827; color: #fff; cursor: pointer; }
+    button:hover { filter: brightness(1.1); }
+    .muted { color: #6b7280; }
+    .pill { display:inline-block; padding:6px 10px; border-radius:999px; background:#fff; border:1px solid #d1d5db; font-weight:600; letter-spacing:.08em; }
+    .grid { display:grid; gap:12px; grid-template-columns: 1fr; }
+    @media (min-width: 900px) { .grid { grid-template-columns: 1.2fr .8fr; } }
+    .col { background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:12px; }
+    .list { display:grid; gap:8px; }
+    .li { background:#f9fafb; border:1px dashed #e5e7eb; border-radius:10px; padding:8px 10px; }
+    .winner { background:#d1fae5; border-color:#10b981; }
+  </style>
+  <script src="/socket.io/socket.io.js"></script>
+</head>
+<body>
+  <div class="card">
+    <div class="row" style="justify-content:space-between; align-items:center;">
+      <h1>Prompt Guessing</h1>
+      <div>Room <span class="pill" id="roomCode">----</span></div>
+    </div>
+
+    <div class="grid">
+      <div class="col">
+        <div class="muted" style="margin-bottom:6px;">Status</div>
+        <div id="statusLine" style="font-size:18px; margin-bottom:10px;">Waiting…</div>
+
+        <!-- Host controls -->
+        <div id="hostControls" style="display:none; margin-bottom:10px;">
+          <div class="row">
+            <button id="startRoundBtn">Start Round (random player)</button>
+            <button id="nextTurnBtn">Next Turn</button>
+            <button id="revealBtn">Reveal & Score</button>
+          </div>
+          <div class="muted" style="margin-top:4px;">Flow: Start Round → Chooser sets prompt → Players guess → Reveal & Score → Next Turn</div>
+        </div>
+
+        <!-- Chooser controls -->
+        <div id="chooserControls" style="display:none;">
+          <div class="muted" style="margin-bottom:6px;">You're up! Enter a prompt (aim for a numeric answer):</div>
+          <div class="row">
+            <input id="promptInput" placeholder='e.g., "gerald green career ppg"' />
+            <button id="submitPromptBtn">Submit</button>
+          </div>
+          <div class="muted" id="chooserHint" style="margin-top:6px;"></div>
+        </div>
+
+        <!-- Prompt + guessing -->
+        <div id="promptBox" style="display:none; margin-top:12px;">
+          <div class="muted" style="margin-bottom:6px;">Prompt</div>
+          <div id="promptText" class="li"></div>
+          <div id="answerBox" style="display:none; margin-top:10px;">
+            <div class="muted" style="margin-bottom:6px;">Answer</div>
+            <div id="answerText" class="li"></div>
+          </div>
+        </div>
+
+        <!-- Player guess -->
+        <div id="guessControls" style="display:none; margin-top:12px;">
+          <div class="muted" style="margin-bottom:6px;">Your guess (number)</div>
+          <div class="row">
+            <input id="guessInput" type="number" step="any" placeholder="Enter a number" />
+            <button id="guessBtn">Submit Guess</button>
+          </div>
+          <div class="muted" id="guessMsg" style="margin-top:6px;"></div>
+        </div>
+      </div>
+
+      <div class="col">
+        <div class="muted" style="margin-bottom:6px;">Players</div>
+        <div id="players" class="list" style="margin-bottom:12px;"></div>
+
+        <div class="muted" style="margin-bottom:6px;">Guesses</div>
+        <div id="guesses" class="list" style="margin-bottom:12px;"></div>
+
+        <div class="muted" style="margin-bottom:6px;">Leaderboard</div>
+        <div id="leaderboard" class="list"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+
+    // restore metadata
+    let meta = null;
+    try { meta = JSON.parse(sessionStorage.getItem('roomMeta') || 'null'); } catch {}
+    if (!meta) {
+      const name = prompt('Display name'); const code = prompt('Room code (4 letters)').toUpperCase();
+      meta = { name, code, isHost: false }; sessionStorage.setItem('roomMeta', JSON.stringify(meta));
+    }
+
+    const socket = io();
+    let you = null;
+    let state = null;
+
+    function renderPlayers(players) {
+      const list = $('players'); list.innerHTML = '';
+      (players || []).forEach(p => {
+        const d = document.createElement('div');
+        d.className = 'li';
+        d.textContent = p.name + (p.isHost ? ' · HOST' : '');
+        list.appendChild(d);
+      });
+    }
+
+    function renderGuesses(guessesByName) {
+      const list = $('guesses'); list.innerHTML = '';
+      Object.entries(guessesByName || {}).forEach(([name, val]) => {
+        const d = document.createElement('div');
+        d.className = 'li';
+        d.textContent = `${name}: ${val}`;
+        list.appendChild(d);
+      });
+    }
+
+    function renderLeaderboard(entries, lastWinners) {
+      const list = $('leaderboard'); list.innerHTML = '';
+      (entries || []).forEach(({ name, score }) => {
+        const d = document.createElement('div');
+        d.className = 'li';
+        if (lastWinners && lastWinners.includes(name)) d.classList.add('winner');
+        d.textContent = `${name}: ${score} pt${score === 1 ? '' : 's'}`;
+        list.appendChild(d);
+      });
+    }
+
+    function updateUI() {
+      if (!state) return;
+      $('roomCode').textContent = meta.code;
+
+      const meIsChooser = you && state.currentTurnId === you.id;
+      const host = you?.isHost;
+
+      // Status line
+      let status = '';
+      if (state.phase === 'idle') status = 'Waiting to start…';
+      if (state.phase === 'choosing') status = 'Host picked a random player. Waiting for their prompt…';
+      if (state.phase === 'guessing') status = 'Prompt set! Everyone enter your guess.';
+      if (state.phase === 'revealed') {
+        const winners = (state.lastWinners || []).join(', ') || 'No winners';
+        status = `Revealed! Closest: ${winners}.`;
+      }
+      $('statusLine').textContent = status;
+
+      // Host controls
+      $('hostControls').style.display = host ? '' : 'none';
+
+      // Chooser controls only when it's their turn and prompt is being accepted
+      $('chooserControls').style.display = (meIsChooser && state.isAcceptingPrompt) ? '' : 'none';
+      $('chooserHint').textContent = 'Try prompts that produce a numeric answer (ppg, age, population, distance, etc.).';
+
+      // Prompt visibility
+      const hasPrompt = !!(state.prompt && state.prompt.length);
+      $('promptBox').style.display = hasPrompt ? '' : 'none';
+      $('promptText').textContent = state.prompt || '';
+
+      // Answer visibility
+      $('answerBox').style.display = state.revealed ? '' : 'none';
+      $('answerText').textContent = state.revealed
+        ? (state.answerText || `Answer: ${state.targetValue}`)
+        : '';
+
+      // Guess controls during guessing phase
+      $('guessControls').style.display = (state.phase === 'guessing') ? '' : 'none';
+    }
+
+    socket.on('connect', () => {
+      socket.emit('room:join', { code: meta.code, name: meta.name, host: !!meta.isHost }, (resp) => {
+        if (!resp?.ok) { alert(resp?.error || 'Join failed'); window.location.href = '/'; return; }
+        you = resp.you;
+        socket.emit('game:sync');
+      });
+    });
+
+    socket.on('game:state', (s) => {
+      state = s;
+      renderPlayers(s.players);
+      renderGuesses(s.guessesByName);
+      renderLeaderboard(s.leaderboard, s.lastWinners);
+      updateUI();
+    });
+
+    // Host buttons
+    $('startRoundBtn').onclick = () => socket.emit('game:startRound');
+    $('nextTurnBtn').onclick = () => socket.emit('game:nextTurn');
+    $('revealBtn').onclick = () => socket.emit('game:revealAndScore');
+
+    // Chooser submits prompt
+    $('submitPromptBtn').onclick = () => {
+      const t = $('promptInput').value.trim();
+      if (!t) return;
+      $('submitPromptBtn').disabled = true;
+      socket.emit('game:setPrompt', t, (ok, msg) => {
+        $('submitPromptBtn').disabled = false;
+        if (ok) $('promptInput').value = '';
+        else alert(msg || 'Could not set prompt');
+      });
+    };
+
+    // Player submits guess
+    $('guessBtn').onclick = () => {
+      const val = Number($('guessInput').value);
+      if (!Number.isFinite(val)) { $('guessMsg').textContent = 'Enter a valid number'; return; }
+      socket.emit('game:guess', val, (ok, msg) => {
+        $('guessMsg').textContent = ok ? 'Guess submitted!' : (msg || 'Error submitting guess');
+      });
+    };
+  </script>
+</body>
+</html>
