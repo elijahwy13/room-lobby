@@ -108,11 +108,49 @@ function pickRandomPlayerId(room) {
   return arr[idx].id;
 }
 
-// -------- Answer helpers (mock for now; plug API later) --------
 async function fetchAnswerText(userPrompt) {
-  // MOCK: deterministic-ish number for dev
-  return `Answer: ${Math.floor(Math.random() * 50) + 1}`;
-}
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 12000); // 12s safety timeout
+  
+    try {
+      const resp = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          temperature: 0,
+          messages: [
+            {
+              role: 'system',
+              content:
+                "You answer with one short sentence that contains exactly ONE numeric value (and unit if applicable). If the prompt isn't answerable, say \"No numeric answer.\""
+            },
+            { role: 'user', content: userPrompt }
+          ]
+        }),
+        signal: controller.signal
+      });
+  
+      clearTimeout(timeout);
+  
+      if (!resp.ok) {
+        const errTxt = await resp.text();
+        throw new Error(`OpenAI ${resp.status}: ${errTxt}`);
+      }
+  
+      const data = await resp.json();
+      const text = data?.choices?.[0]?.message?.content?.trim() || '';
+      return text;
+    } catch (err) {
+      clearTimeout(timeout);
+      console.error('fetchAnswerText error:', err.message);
+      throw err;
+    }
+  }
+  
 
 function extractFirstNumber(text) {
   if (!text) return null;
