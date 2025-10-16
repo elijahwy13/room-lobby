@@ -43,7 +43,7 @@
             <button id="nextTurnBtn">Next Turn</button>
             <button id="revealBtn">Reveal & Score</button>
           </div>
-          <div class="muted" style="margin-top:4px;">Flow: Start Round → Chooser sets prompt → Players guess → Reveal & Score → Next Turn</div>
+          <!-- removed the flow helper line -->
         </div>
 
         <!-- Chooser controls -->
@@ -101,7 +101,7 @@
       meta = { name, code, isHost: false }; sessionStorage.setItem('roomMeta', JSON.stringify(meta));
     }
 
-    const socket = io();
+    const socket = io({ transports: ['websocket','polling'], path: '/socket.io' });
     let you = null;
     let state = null;
 
@@ -115,16 +115,6 @@
       });
     }
 
-    function renderGuesses(guessesByName) {
-      const list = $('guesses'); list.innerHTML = '';
-      Object.entries(guessesByName || {}).forEach(([name, val]) => {
-        const d = document.createElement('div');
-        d.className = 'li';
-        d.textContent = `${name}: ${val}`;
-        list.appendChild(d);
-      });
-    }
-
     function renderLeaderboard(entries, lastWinners) {
       const list = $('leaderboard'); list.innerHTML = '';
       (entries || []).forEach(({ name, score }) => {
@@ -132,6 +122,26 @@
         d.className = 'li';
         if (lastWinners && lastWinners.includes(name)) d.classList.add('winner');
         d.textContent = `${name}: ${score} pt${score === 1 ? '' : 's'}`;
+        list.appendChild(d);
+      });
+    }
+
+    function renderGuessesAnon(guessesByName, revealed) {
+      const list = $('guesses'); list.innerHTML = '';
+      const entries = Object.entries(guessesByName || {});
+      if (!revealed) {
+        // Anonymous before reveal: show only count
+        const d = document.createElement('div');
+        d.className = 'li';
+        d.textContent = `${entries.length} guess${entries.length === 1 ? '' : 'es'} submitted (hidden until reveal)`;
+        list.appendChild(d);
+        return;
+      }
+      // After reveal, show names + values
+      entries.forEach(([name, val]) => {
+        const d = document.createElement('div');
+        d.className = 'li';
+        d.textContent = `${name}: ${val}`;
         list.appendChild(d);
       });
     }
@@ -174,6 +184,9 @@
 
       // Guess controls during guessing phase
       $('guessControls').style.display = (state.phase === 'guessing') ? '' : 'none';
+
+      // Render guesses anonymously until reveal
+      renderGuessesAnon(state.guessesByName, state.revealed);
     }
 
     socket.on('connect', () => {
@@ -187,7 +200,6 @@
     socket.on('game:state', (s) => {
       state = s;
       renderPlayers(s.players);
-      renderGuesses(s.guessesByName);
       renderLeaderboard(s.leaderboard, s.lastWinners);
       updateUI();
     });
