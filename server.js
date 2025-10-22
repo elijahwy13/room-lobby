@@ -18,6 +18,24 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
 
+// ---- Daily leaderboard (in-memory seed) ----
+const leaderboard = new Map([
+  ['Elijah', { wins: 0, money: -2 }],
+  ['Isaac',  { wins: 1, money:  3.50 }],
+  ['Sais',   { wins: 0, money:  0 }],
+  ['Chris',  { wins: 0, money: -2 }],
+]);
+
+app.get('/api/standings', (_req, res) => {
+  const standings = Array.from(leaderboard.entries()).map(([name, s]) => ({
+    name,
+    wins: s.wins,
+    money: s.money,
+  }));
+  res.json({ standings });
+});
+
+
 // Simple health check
 app.get('/health', (_req, res) => res.status(200).send('ok'));
 
