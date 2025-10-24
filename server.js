@@ -20,10 +20,10 @@ app.use(express.static('public'));
 
 // ---- Daily leaderboard (in-memory seed) ----
 const leaderboard = new Map([
-  ['Elijah', { wins: 0, money: -4 }],
-  ['Isaac',  { wins: 2, money:  8.70 }],
-  ['Sais',   { wins: 0, money:  -2 }],
-  ['Chris',  { wins: 0, money: -4 }],
+  ['Elijah', { wins: 0, money: -5 }],
+  ['Isaac',  { wins: 3, money:  11.30 }],
+  ['Sais',   { wins: 0, money:  -3 }],
+  ['Chris',  { wins: 0, money: -5 }],
 ]);
 
 app.get('/api/standings', (_req, res) => {
